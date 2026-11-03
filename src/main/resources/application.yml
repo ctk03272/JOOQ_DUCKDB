@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: duckdb-jooq-poc
+  main:
+    web-application-type: none
+    banner-mode: off
+duckdb:
+  memory-limit: 2GB
+  threads: 4
+  spill-directory: ${java.io.tmpdir}/duckdb-spill
+analysis:
+  schema-location: db/**/*.sql
+logging:
+  level:
+    org.jooq.Constants: WARN
+    org.jooq.impl.DefaultExecuteContext.logVersionSupport: WARN
