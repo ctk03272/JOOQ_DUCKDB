@@ -10,4 +10,5 @@ data class ConfiguredAnalysis<P>(
     val query: DuckDbAnalysis<P>,
     val requiredInputs: List<Table<*>>,
     val outputTable: Table<*>,
+    val optionalInputs: List<Table<*>> = emptyList(),
 )

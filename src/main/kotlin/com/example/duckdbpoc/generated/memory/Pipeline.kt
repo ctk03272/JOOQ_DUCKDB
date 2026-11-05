@@ -4,9 +4,14 @@
 package com.example.duckdbpoc.generated.memory
 
 
+import com.example.duckdbpoc.generated.memory.tables.Capacity
+import com.example.duckdbpoc.generated.memory.tables.CapacityResult
+import com.example.duckdbpoc.generated.memory.tables.FcEarlyShufflingConfig
+import com.example.duckdbpoc.generated.memory.tables.FcShutdown
 import com.example.duckdbpoc.generated.memory.tables.MonthlyPrice
 import com.example.duckdbpoc.generated.memory.tables.MonthlyUsage
 import com.example.duckdbpoc.generated.memory.tables.Prices
+import com.example.duckdbpoc.generated.memory.tables.PurchaseOrder
 import com.example.duckdbpoc.generated.memory.tables.Readings
 import com.example.duckdbpoc.generated.memory.tables.Systems
 
@@ -32,6 +37,26 @@ open class Pipeline : SchemaImpl(DSL.name("pipeline"), Memory.MEMORY, DSL.commen
     }
 
     /**
+     * The table <code>memory.pipeline.capacity</code>.
+     */
+    val CAPACITY: Capacity get() = Capacity.CAPACITY
+
+    /**
+     * The table <code>memory.pipeline.capacity_result</code>.
+     */
+    val CAPACITY_RESULT: CapacityResult get() = CapacityResult.CAPACITY_RESULT
+
+    /**
+     * The table <code>memory.pipeline.fc_early_shuffling_config</code>.
+     */
+    val FC_EARLY_SHUFFLING_CONFIG: FcEarlyShufflingConfig get() = FcEarlyShufflingConfig.FC_EARLY_SHUFFLING_CONFIG
+
+    /**
+     * The table <code>memory.pipeline.fc_shutdown</code>.
+     */
+    val FC_SHUTDOWN: FcShutdown get() = FcShutdown.FC_SHUTDOWN
+
+    /**
      * The table <code>memory.pipeline.monthly_price</code>.
      */
     val MONTHLY_PRICE: MonthlyPrice get() = MonthlyPrice.MONTHLY_PRICE
@@ -47,6 +72,11 @@ open class Pipeline : SchemaImpl(DSL.name("pipeline"), Memory.MEMORY, DSL.commen
     val PRICES: Prices get() = Prices.PRICES
 
     /**
+     * The table <code>memory.pipeline.purchase_order</code>.
+     */
+    val PURCHASE_ORDER: PurchaseOrder get() = PurchaseOrder.PURCHASE_ORDER
+
+    /**
      * The table <code>memory.pipeline.readings</code>.
      */
     val READINGS: Readings get() = Readings.READINGS
@@ -59,9 +89,14 @@ open class Pipeline : SchemaImpl(DSL.name("pipeline"), Memory.MEMORY, DSL.commen
     override fun getCatalog(): Catalog = Memory.MEMORY
 
     override fun getTables(): List<Table<*>> = listOf(
+        Capacity.CAPACITY,
+        CapacityResult.CAPACITY_RESULT,
+        FcEarlyShufflingConfig.FC_EARLY_SHUFFLING_CONFIG,
+        FcShutdown.FC_SHUTDOWN,
         MonthlyPrice.MONTHLY_PRICE,
         MonthlyUsage.MONTHLY_USAGE,
         Prices.PRICES,
+        PurchaseOrder.PURCHASE_ORDER,
         Readings.READINGS,
         Systems.SYSTEMS
     )

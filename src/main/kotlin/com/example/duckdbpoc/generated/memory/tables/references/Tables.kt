@@ -5,13 +5,38 @@
 package com.example.duckdbpoc.generated.memory.tables.references
 
 
+import com.example.duckdbpoc.generated.memory.tables.Capacity
+import com.example.duckdbpoc.generated.memory.tables.CapacityResult
+import com.example.duckdbpoc.generated.memory.tables.FcEarlyShufflingConfig
+import com.example.duckdbpoc.generated.memory.tables.FcShutdown
 import com.example.duckdbpoc.generated.memory.tables.MonthlyPrice
 import com.example.duckdbpoc.generated.memory.tables.MonthlyUsage
 import com.example.duckdbpoc.generated.memory.tables.Prices
+import com.example.duckdbpoc.generated.memory.tables.PurchaseOrder
 import com.example.duckdbpoc.generated.memory.tables.Readings
 import com.example.duckdbpoc.generated.memory.tables.Systems
 
 
+
+/**
+ * The table <code>memory.pipeline.capacity</code>.
+ */
+val CAPACITY: Capacity = Capacity.CAPACITY
+
+/**
+ * The table <code>memory.pipeline.capacity_result</code>.
+ */
+val CAPACITY_RESULT: CapacityResult = CapacityResult.CAPACITY_RESULT
+
+/**
+ * The table <code>memory.pipeline.fc_early_shuffling_config</code>.
+ */
+val FC_EARLY_SHUFFLING_CONFIG: FcEarlyShufflingConfig = FcEarlyShufflingConfig.FC_EARLY_SHUFFLING_CONFIG
+
+/**
+ * The table <code>memory.pipeline.fc_shutdown</code>.
+ */
+val FC_SHUTDOWN: FcShutdown = FcShutdown.FC_SHUTDOWN
 
 /**
  * The table <code>memory.pipeline.monthly_price</code>.
@@ -27,6 +52,11 @@ val MONTHLY_USAGE: MonthlyUsage = MonthlyUsage.MONTHLY_USAGE
  * The table <code>memory.pipeline.prices</code>.
  */
 val PRICES: Prices = Prices.PRICES
+
+/**
+ * The table <code>memory.pipeline.purchase_order</code>.
+ */
+val PURCHASE_ORDER: PurchaseOrder = PurchaseOrder.PURCHASE_ORDER
 
 /**
  * The table <code>memory.pipeline.readings</code>.

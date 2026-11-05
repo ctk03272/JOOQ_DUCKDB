@@ -39,7 +39,7 @@ analysis:
 
 `measurement.sql`은 systems·readings·monthly_usage, `pricing.sql`은 prices·monthly_price를 정의한다. 파일 경계는 작성·관리 단위일 뿐이며 DB 논리 스키마는 기존 pipeline을 유지한다. 분석은 도메인을 선택하지 않는다.
 
-`TableDefinitions`가 모든 SQL 파일을 한 번 읽고 jOOQ 파서로 CREATE TABLE 문을 찾아 (DB 스키마 이름, 테이블 이름)별로 보관한다. 파일명을 테이블명에서 추측하지 않는다. 각 작업은 `requiredInputs + outputTable`에 명시된 테이블의 생성문만 실행한다. 가격 분석은 두 파일에 걸쳐 있는 readings·prices·monthly_price만 생성한다. 공유 상태에는 SQL 문자열만 보관하고 실행 쿼리 객체는 작업별로 생성한다.
+`TableDefinitions`가 모든 SQL 파일을 한 번 읽고 jOOQ 파서로 CREATE TABLE 문을 찾아 (DB 스키마 이름, 테이블 이름)별로 보관한다. 파일명을 테이블명에서 추측하지 않는다. 각 작업은 `requiredInputs + optionalInputs + outputTable`에 명시된 테이블의 생성문만 실행한다. 가격 분석은 두 파일에 걸쳐 있는 readings·prices·monthly_price만 생성한다. 공유 상태에는 SQL 문자열만 보관하고 실행 쿼리 객체는 작업별로 생성한다.
 
 빌드의 codegen도 `src/main/resources/db/**/*.sql`을 모두 읽어 빌드용 in-memory DB에 적용한다. Gradle이 YAML을 파싱하지 않고 별도 빌드 의존성도 추가하지 않는다. 생성된 코드는 기존 `src/main/kotlin` 위치에 유지한다.
 
@@ -66,7 +66,7 @@ fun monthlyPrice() = ConfiguredAnalysis(
 
 분석 ID는 한 번 선언한 객체를 등록과 호출에서 함께 참조한다. 기존 월별 분석은 `MonthlyAnalyses.USAGE`와 `MonthlyAnalyses.PRICE`다. 같은 문자열로 `AnalysisId`를 다시 생성해도 등록된 ID가 되지 않는다. 문자열 이름만으로 다른 파라미터 타입의 분석에 연결되지 않게 하기 위한 계약이다. ID는 내부 Kotlin API이며 외부 메시지 형식을 정의하지 않는다.
 
-새 분석에서 사용하는 패턴은 다음과 같다. 아래 Capacity 타입은 사용법 설명이며 capacity 계산 구현은 아직 포함하지 않는다.
+Capacity 분석은 다음 호출별 파라미터 타입을 사용한다. 실제 구현은 `analysis/capacity/`에 있다.
 
 ```kotlin
 data class CapacityParameters(
@@ -78,16 +78,54 @@ data class CapacityParameters(
     val useEarlyShufflingForPicoRC: Boolean,
 )
 
-val CAPACITY_ANALYSIS = AnalysisId<CapacityParameters>("capacity")
-
-// 분석 구현: DuckDbAnalysis<CapacityParameters>
-// Kotlin Bean 등록: ConfiguredAnalysis(id = CAPACITY_ANALYSIS, query = ..., ...)
-// 호출: AnalysisRequest(analysisId = CAPACITY_ANALYSIS, parameters = CapacityParameters(...), ...)
+// 등록된 ID는 CapacityAnalyses.CAPACITY를 참조한다.
+// 같은 이름으로 AnalysisId를 새로 만들지 않는다.
 ```
 
 예를 들어 `MonthlyAnalyses.PRICE`에 `parameters = "wrong"`을 전달하면 타입 불일치로 컴파일되지 않는다. 공통 Registry는 서로 다른 타입의 분석들을 저장하므로 조회 한 곳에서만 제네릭 캐스트를 사용한다. 동일한 ID 객체의 타입과 분석 타입이 등록 시 연결되어 있으며, 문자열을 비교해 타입을 추정하지 않는다.
 
 공유 분석 객체에 파라미터를 저장하지 않는다. 각 호출은 자신의 파라미터로 새 쿼리를 만든다. 파라미터는 임의의 Kotlin 타입이므로 공통 실행기가 깊은 복사를 하지 않는다. 호출자는 실행 중 파라미터나 내부 컬렉션을 변경하지 않고, 가변 목록에서 값을 가져온다면 요청을 만들 때 `toList()` 등으로 별도 값을 준비한다.
+
+## Capacity DataFrame 로직 이식
+
+`CapacityAnalysis`는 제공된 `IpsModelPreProcessCapacityCalculator` 사진의 계산 순서를 jOOQ SELECT로 구성한다. 입력과 출력 DDL은 `db/capacity.sql`에 있고 codegen을 통해 생성한다. 별도 DataFrame 의존성이나 분석별 실행기는 추가하지 않았다.
+
+```kotlin
+val result = pipeline.process(
+    AnalysisRequest(
+        analysisId = CapacityAnalyses.CAPACITY,
+        inputs = mapOf(
+            CAPACITY to InputFile(capacityS3Uri, InputFormat.CSV),
+            PURCHASE_ORDER to InputFile(purchaseOrderS3Uri, InputFormat.CSV),
+            FC_SHUTDOWN to InputFile(shutdownS3Uri, InputFormat.CSV),
+            // 설정 파일이 없으면 이 항목을 생략한다.
+            FC_EARLY_SHUFFLING_CONFIG to InputFile(filteredConfigS3Uri, InputFormat.CSV),
+        ),
+        output = outputS3Uri,
+        parameters = CapacityParameters(
+            rcList = rcList,
+            xDockList = xDockList,
+            picoRcList = picoRcList,
+            defaultEarlyShufflingRatio = defaultEarlyShufflingRatio,
+            isUnLimitCapacity = isUnLimitCapacity,
+            useEarlyShufflingForPicoRC = useEarlyShufflingForPicoRC,
+        ),
+    ),
+)
+```
+
+- `capacity`, `purchase_order`, `fc_shutdown`은 필수 입력이다. 데이터가 없으면 헤더만 있는 파일을 전달할 수 있다. `fc_early_shuffling_config`만 선택 입력이며 호출자가 이미 groupName으로 필터링한 파일을 전달한다. 분석에서 groupName을 다시 필터링하지 않는다.
+- 공통 `ConfiguredAnalysis.optionalInputs`에 선언한 테이블은 파일 생략 시 빈 테이블로 만든다. 파일 주소를 전달했는데 읽기 실패가 발생하면 오류를 전파한다. 필수 입력 누락을 빈 입력으로 바꾸지 않는다.
+- `purchase_order.date`와 `shutdownDt`는 `-`를 제거해 정수 날짜로 비교한다. 날짜는 기존 입력 계약인 `yyyy-MM-dd` 또는 `yyyyMMdd`를 대상으로 한다. 날짜·센터·유형별 `quantity`와 `modelAllocatedQuantity`를 집계한다. `confirmedQuantity`를 합산하지 않는다.
+- 원래 용량을 보관한 뒤 발주량 차감과 예약 용량의 세 분기를 적용한다. 무제한 모드는 capacity와 revised_capacity를 Int.MAX_VALUE, reserved_capacity를 0으로 만든다. 그 다음 휴무일을 적용하므로 무제한 모드라도 휴무일에는 세 용량이 모두 0이다.
+- 비율은 센터·유형별 설정 → 센터 공통 설정 → RC/XDock/PicoRC 기본 규칙 순으로 선택한다. 0.0은 유효한 설정값이며 null일 때만 다음 값으로 넘어간다. 무제한 모드의 비율은 0.0이다.
+- 설정의 중복 키는 첫 입력 행을 유지한다. 적재된 설정 테이블의 rowid로 선택 순서를 명시하며, 첫 행의 비율이 null이어도 다음 중복 행을 대신 선택하지 않는다. 휴무일 입력의 중복 행은 기존 LEFT JOIN처럼 결과에 남는다.
+- 예약량은 `min(revised_capacity, (ratio * old_capacity).toInt())`다. `CapacityNumbers`는 Kotlin Int의 오버플로, Double.toInt의 절삭·범위 제한·NaN 처리 의미를 SQL 식으로 유지한다. 발주 수량의 null은 원래 Number.toInt처럼 계산 실패로 처리하며 SUM에서 조용히 제외하지 않는다.
+- 결과 `capacity_result`의 20개 컬럼과 컬럼 순서는 사진의 OUTPUT_COLUMNS와 같다. 테스트는 행 내용과 중복을 비교하며 최종 CSV의 행 순서 동일성을 보장하지 않는다. 공통 출력 정렬은 추가하지 않았다.
+
+검증은 실제 Spring 설정과 주입된 PipelineService → 등록된 CapacityAnalysis → DuckDB 적재·계산·CSV 출력 경로로 수행했다. 테스트 전용 Kotlin 기준 구현은 사진의 계산식을 옮긴 것이며 원본 DataFrame 라이브러리를 실행한 비교가 아니다. 9개 테스트에서 계산 분기·null 용량·null 조인 키·중복·설정 생략/빈 파일·읽기 실패·숫자 변환·CSV/Parquet 혼합·100개 동시 요청의 결과와 자원 정리를 확인했다. 새 Capacity의 실제 S3 입출력과 대용량 성능은 이번에 검증하지 않았다.
+
+이식 시 참고한 의미: [DataFrame distinctBy의 첫 행 선택](https://kotlin.github.io/dataframe/distinct.html), [DataFrame 조인의 키 비교 구현](https://github.com/Kotlin/dataframe/blob/master/core/src/main/kotlin/org/jetbrains/kotlinx/dataframe/impl/api/join.kt), [Kotlin Double.toInt](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-double/to-int.html), [DuckDB 입력 순서 보존](https://duckdb.org/docs/sql/dialect/order_preservation).
 
 ## AWS 설정과 인증
 
@@ -182,7 +220,7 @@ S3 출력은 DuckDB가 최종 S3 객체에 직접 COPY한다. DB 트랜잭션이
 ./gradlew loadTest -PloadJobs=120
 ```
 
-- 일반 테스트는 로컬 fixture 통합 테스트 11개, 호출별 파라미터 통합 테스트 2개, S3 SQL 어댑터 테스트 4개다. 입력 누락과 실제 DuckDB 파일 읽기 실패의 예외 전파·정리를 검증한다.
+- 일반 테스트는 기존 로컬 fixture 통합 테스트 11개, 호출별 파라미터 통합 테스트 2개, Capacity 통합 테스트 9개, S3 SQL 어댑터 테스트 4개로 총 26개다. 입력 누락과 실제 DuckDB 파일 읽기 실패의 예외 전파·정리를 검증한다.
 - 파라미터 통합 테스트는 실제 Spring 서비스·등록·실행기·DB 설정에 테스트용 분석 Bean만 추가한다. 서로 다른 목록·배수·플래그를 가진 100개 동시 요청의 CSV 내용, 다른 파라미터 타입의 분석 등록, 요청 재사용 시 값 변경, 동일 표시 이름을 가진 미등록 ID의 거부와 자원 정리를 검증한다. 이 테스트의 입출력은 로컬 fixture이며 실제 S3 입출력 검증이 아니다.
 - 기존 계산·가격 경계·마이크로초·스키마/연결 정리 검증을 유지한다. 제거한 업무 검증의 예외를 기대하던 테스트 2개도 제거했다.
 - S3 SQL 어댑터 테스트는 JDBC mock으로 주소 바인딩·오류 전파를 확인한다. 실제 AWS 권한·네트워크·multipart 성공 증거가 아니다.

@@ -8,7 +8,7 @@
 
 분석 작성자는 jOOQ codegen 테이블·컬럼으로 분석 쿼리를 작성하고 Kotlin 설정에 등록한다. 연결 생성, 작업 스키마 격리, 파일 적재, 트랜잭션, 결과 저장과 자원 정리는 공통 코드가 담당한다. 분석마다 Factory·Workspace·PipelineDefinition·실행 Service를 새로 구현하도록 요구하지 않는다.
 
-현재 예제인 월별 사용량 분석과 월별 가격 분석은 이 계약을 사용하는 서로 독립적인 분석이다. 공통 코드는 이 예제의 테이블이나 업무 규칙에 의존하지 않는다. 솔버 자체를 구현하거나 실행하는 프로젝트가 아니며, 현재 구현 범위는 호출자가 지정한 S3 주소에 결과 CSV를 생성하고 그 주소를 반환하는 것까지다.
+현재 월별 사용량·월별 가격·Capacity 분석은 이 계약을 사용하는 서로 독립적인 분석이다. 공통 코드는 이 예제의 테이블이나 업무 규칙에 의존하지 않는다. 솔버 자체를 구현하거나 실행하는 프로젝트가 아니며, 현재 구현 범위는 호출자가 지정한 S3 주소에 결과 CSV를 생성하고 그 주소를 반환하는 것까지다.
 
 ## 사용자의 명시적 지시
 
@@ -68,11 +68,20 @@
 
 - DDL은 `src/main/resources/db/` 아래에서 도메인별 SQL 파일로 나눈다. 파일 구분은 작성·관리 단위이며, 한 테이블당 한 파일이나 도메인당 별도 DB 스키마를 강제하는 규칙이 아니다.
 - 애플리케이션은 `application.yml`의 `analysis.schema-location: db/**/*.sql` 패턴으로 모든 정의를 읽는다. YAML에 개별 SQL 파일 목록이나 도메인 선택 목록을 만들지 않으며 검색 패턴에 `classpath:`를 넣지 않는다.
-- 각 분석은 codegen 객체로 `requiredInputs`와 `outputTable`을 명시한다. 공통 실행기는 전체 정의 중 해당 테이블의 CREATE TABLE만 작업 스키마에 실행한다. 도메인 파일을 넘나드는 테이블 사용을 허용하며 파일명으로 테이블을 찾지 않는다.
+- 각 분석은 codegen 객체로 `requiredInputs`, `optionalInputs`, `outputTable`을 명시한다. 공통 실행기는 전체 정의 중 해당 테이블의 CREATE TABLE만 작업 스키마에 실행한다. 도메인 파일을 넘나드는 테이블 사용을 허용하며 파일명으로 테이블을 찾지 않는다.
 - 현재 DDL 선택 기능은 CREATE TABLE을 대상으로 한다. ALTER TABLE·뷰·인덱스·시드 실행이나 참조 의존성 자동 해석까지 구현되어 있다고 간주하지 않는다.
 - 빌드의 codegen은 `src/main/resources/db/**/*.sql`을 모두 읽어 빌드용 in-memory DuckDB를 만들고 스키마를 적용한 뒤 코드를 생성한다. 실행 중인 애플리케이션 DB가 필요하지 않다. 이를 위해 Gradle에 YAML 파서 의존성을 추가하지 않는다.
 - 생성 코드는 `src/main/kotlin/com/example/duckdbpoc/generated/`에 두며 직접 수정하지 않는다. 스키마 변경은 도메인 SQL을 수정하고 codegen을 다시 실행해 반영한다.
 - 현재 논리 스키마는 `pipeline`이며 런타임에는 작업별 고유 스키마로 매핑한다. 생성 패키지의 `memory`는 codegen용 DuckDB 카탈로그 이름에서 나온 것으로 데이터 파일 저장 디렉터리가 아니다.
+
+## Capacity 계산 계약
+
+- `CapacityAnalyses.CAPACITY`와 `CapacityParameters`를 사용하며 목록·비율·옵션은 호출마다 전달한다. 계산 순서는 발주 집계 → 용량 차감 → 휴무일 적용 → early shuffling이다.
+- `capacity`, `purchase_order`, `fc_shutdown`은 필수 입력이다. early shuffling 설정만 `optionalInputs`로 등록하며 생략 시 빈 테이블로 생성한다. 전달된 파일의 읽기 오류는 생략으로 취급하지 않는다.
+- early shuffling 파일은 호출자가 groupName으로 필터링해 전달한다. 분석에서 다시 필터링하거나 임의의 그룹을 선택하지 않는다.
+- 발주 집계는 quantity를 사용한다. 기존 중간 변수 이름이 confirmedQuantitySum이었다는 이유로 confirmedQuantity로 변경하지 않는다.
+- 설정 중복은 첫 입력 행을 유지한다. 비율 우선순위, null과 0.0의 차이, 휴무일의 무제한 모드 우선 적용, Kotlin 숫자 변환과 기존 20개 출력 컬럼을 보존한다.
+- 현재 동등성 검증은 사진에서 옮긴 테스트용 Kotlin 기준 계산과 비교한 것이다. 원본 DataFrame 실행이나 실제 S3 대용량 검증까지 완료했다고 설명하지 않는다.
 
 ## 동시 실행과 자원 수명
 
