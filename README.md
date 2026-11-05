@@ -120,7 +120,7 @@ val result = pipeline.process(
 - 원래 용량을 보관한 뒤 발주량 차감과 예약 용량의 세 분기를 적용한다. 무제한 모드는 capacity와 revised_capacity를 Int.MAX_VALUE, reserved_capacity를 0으로 만든다. 그 다음 휴무일을 적용하므로 무제한 모드라도 휴무일에는 세 용량이 모두 0이다.
 - 비율은 센터·유형별 설정 → 센터 공통 설정 → RC/XDock/PicoRC 기본 규칙 순으로 선택한다. 0.0은 유효한 설정값이며 null일 때만 다음 값으로 넘어간다. 무제한 모드의 비율은 0.0이다.
 - 설정의 중복 키는 첫 입력 행을 유지한다. 적재된 설정 테이블의 rowid로 선택 순서를 명시하며, 첫 행의 비율이 null이어도 다음 중복 행을 대신 선택하지 않는다. 휴무일 입력의 중복 행은 기존 LEFT JOIN처럼 결과에 남는다.
-- 예약량은 `min(revised_capacity, (ratio * old_capacity).toInt())`다. `CapacityNumbers`는 Kotlin Int의 오버플로, Double.toInt의 절삭·범위 제한·NaN 처리 의미를 SQL 식으로 유지한다. 발주 수량의 null은 원래 Number.toInt처럼 계산 실패로 처리하며 SUM에서 조용히 제외하지 않는다.
+- 예약량은 `min(revised_capacity, (ratio * old_capacity).toInt())`다. `util/jooq/KotlinNumericExpressions`는 Kotlin Int의 오버플로, Double.toInt의 절삭·범위 제한·NaN 처리 의미를 SQL 식으로 유지한다. 발주 수량의 null은 원래 Number.toInt처럼 계산 실패로 처리하며 SUM에서 조용히 제외하지 않는다.
 - 결과 `capacity_result`의 20개 컬럼과 컬럼 순서는 사진의 OUTPUT_COLUMNS와 같다. 테스트는 행 내용과 중복을 비교하며 최종 CSV의 행 순서 동일성을 보장하지 않는다. 공통 출력 정렬은 추가하지 않았다.
 
 검증은 실제 Spring 설정과 주입된 PipelineService → 등록된 CapacityAnalysis → DuckDB 적재·계산·CSV 출력 경로로 수행했다. 테스트 전용 Kotlin 기준 구현은 사진의 계산식을 옮긴 것이며 원본 DataFrame 라이브러리를 실행한 비교가 아니다. 9개 테스트에서 계산 분기·null 용량·null 조인 키·중복·설정 생략/빈 파일·읽기 실패·숫자 변환·CSV/Parquet 혼합·100개 동시 요청의 결과와 자원 정리를 확인했다. 새 Capacity의 실제 S3 입출력과 대용량 성능은 이번에 검증하지 않았다.
@@ -200,6 +200,7 @@ framework/analysis/    분석 계약·설정 등록
 framework/pipeline/    입력 요청·공통 실행기·결과
 adapter/               read_csv·read_parquet·COPY
 infrastructure/        연결·스키마·jOOQ 매핑·AWS 초기화
+util/jooq/             분석에서 재사용하는 jOOQ 계산식 유틸
 ```
 
 공유 in-memory 인스턴스 하나에서 작업마다 별도 연결·고유 스키마를 사용한다. 적재·분석 저장은 트랜잭션으로 실행하고 커밋 후 내보낸다. 성공·실패 모두 작업 스키마와 연결을 정리한다. 전체 작업 잠금이나 공유 현재 연결 필드는 없다.

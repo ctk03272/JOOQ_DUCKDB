@@ -1,4 +1,4 @@
-package com.example.duckdbpoc.analysis.capacity
+package com.example.duckdbpoc.util.jooq
 
 import org.jooq.Field
 import org.jooq.impl.DSL.*
@@ -6,11 +6,11 @@ import org.jooq.impl.SQLDataType
 import java.math.BigDecimal
 
 /** Preserve the original Kotlin Int arithmetic and Double.toInt(), not SQL rounding. */
-internal object CapacityNumbers {
+internal object KotlinNumericExpressions {
     fun sumInt(value: Field<Int?>): Field<Int> {
         // The old Number.toInt() fails on null; SQL SUM must not silently skip that row.
         val number = coalesce(value.coerce(SQLDataType.INTEGER), function(
-            name("error"), SQLDataType.INTEGER, inline("Null purchase order quantity cannot be converted to Int"),
+            name("error"), SQLDataType.INTEGER, inline("Null numeric value cannot be converted to Int"),
         ))
         return wrapInt(sum(number).mod(BigDecimal("4294967296")).cast(SQLDataType.BIGINT))
     }

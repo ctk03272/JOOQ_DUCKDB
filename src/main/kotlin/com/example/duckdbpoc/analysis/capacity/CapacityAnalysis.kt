@@ -1,5 +1,6 @@
 package com.example.duckdbpoc.analysis.capacity
 
+import com.example.duckdbpoc.util.jooq.KotlinNumericExpressions
 import com.example.duckdbpoc.framework.analysis.DuckDbAnalysis
 import com.example.duckdbpoc.generated.memory.tables.references.CAPACITY
 import com.example.duckdbpoc.generated.memory.tables.references.CAPACITY_RESULT
@@ -20,7 +21,7 @@ class CapacityAnalysis : DuckDbAnalysis<CapacityParameters> {
         val ratios = applyEarlyShufflingRatio(available, parameters)
         val reservation = least(
             ratios.column(CAPACITY_RESULT.REVISED_CAPACITY),
-            CapacityNumbers.toInt(ratios.column(CAPACITY_RESULT.EARLY_SHUFFLING_RATIO)
+            KotlinNumericExpressions.toInt(ratios.column(CAPACITY_RESULT.EARLY_SHUFFLING_RATIO)
                 .mul(ratios.column(CAPACITY_RESULT.OLD_CAPACITY).cast(SQLDataType.DOUBLE))),
         )
         // Output order and names come from the generated result table's 20-column schema.
@@ -37,8 +38,8 @@ class CapacityAnalysis : DuckDbAnalysis<CapacityParameters> {
             PURCHASE_ORDER.FC.`as`(CAPACITY_RESULT.CENTER_CODE),
             PURCHASE_ORDER.TYPE.`as`(CAPACITY_RESULT.CAPACITY_TYPE),
             // Despite its old name confirmedQuantitySum, the source aggregates quantity.
-            CapacityNumbers.sumInt(PURCHASE_ORDER.QUANTITY).`as`(CAPACITY_RESULT.OPEN_ORDER),
-            CapacityNumbers.sumInt(PURCHASE_ORDER.MODELALLOCATEDQUANTITY).`as`(CAPACITY_RESULT.MODEL_ALLOCATED),
+            KotlinNumericExpressions.sumInt(PURCHASE_ORDER.QUANTITY).`as`(CAPACITY_RESULT.OPEN_ORDER),
+            KotlinNumericExpressions.sumInt(PURCHASE_ORDER.MODELALLOCATEDQUANTITY).`as`(CAPACITY_RESULT.MODEL_ALLOCATED),
         ).from(PURCHASE_ORDER).groupBy(date, PURCHASE_ORDER.FC, PURCHASE_ORDER.TYPE).asTable("po_sum")
     }
 
@@ -48,17 +49,17 @@ class CapacityAnalysis : DuckDbAnalysis<CapacityParameters> {
         val reserved = coalesce(CAPACITY.RESERVED_CAPACITY, 0).coerce(SQLDataType.INTEGER)
         val openOrder = coalesce(po.column(CAPACITY_RESULT.OPEN_ORDER), 0).coerce(SQLDataType.INTEGER)
         val allocated = coalesce(po.column(CAPACITY_RESULT.MODEL_ALLOCATED), 0).coerce(SQLDataType.INTEGER)
-        val revisedRemaining = CapacityNumbers.subtract(revised, openOrder)
+        val revisedRemaining = KotlinNumericExpressions.subtract(revised, openOrder)
         val reservedRemaining = greatest(
             `when`(revisedRemaining.gt(0), reserved)
-                .`when`(CapacityNumbers.subtract(openOrder, allocated).ge(revised), CapacityNumbers.subtract(reserved, allocated))
-                .otherwise(CapacityNumbers.subtract(reserved, CapacityNumbers.subtract(openOrder, revised))),
+                .`when`(KotlinNumericExpressions.subtract(openOrder, allocated).ge(revised), KotlinNumericExpressions.subtract(reserved, allocated))
+                .otherwise(KotlinNumericExpressions.subtract(reserved, KotlinNumericExpressions.subtract(openOrder, revised))),
             inline(0),
         )
         return select(
             CAPACITY.DATE, CAPACITY.CENTER_CODE, CAPACITY.CENTER_MANAGEMENT_TYPE, CAPACITY.CAPACITY_TYPE,
             (if (parameters.isUnLimitCapacity) inline(Int.MAX_VALUE)
-             else greatest(CapacityNumbers.subtract(original, openOrder), inline(0))).`as`(CAPACITY_RESULT.CAPACITY),
+             else greatest(KotlinNumericExpressions.subtract(original, openOrder), inline(0))).`as`(CAPACITY_RESULT.CAPACITY),
             CAPACITY.OVERFLOW_NOT_ALLOWED, CAPACITY.HARDCAP,
             (if (parameters.isUnLimitCapacity) inline(Int.MAX_VALUE)
              else greatest(revisedRemaining, inline(0))).`as`(CAPACITY_RESULT.REVISED_CAPACITY),

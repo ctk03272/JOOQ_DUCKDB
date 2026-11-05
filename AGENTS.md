@@ -45,6 +45,7 @@
 - `framework/pipeline/`: 요청·결과 계약과 공통 실행 순서를 담당한다. 특정 분석을 강제로 결합하지 않는다.
 - `adapter/`: DuckDB의 `read_csv`, `read_parquet`, `COPY`를 통한 파일 입출력을 담당한다.
 - `infrastructure/`: DuckDB 연결·작업 스키마의 수명, jOOQ 스키마 매핑, DDL 선택·실행, AWS 초기화를 담당한다.
+- `util/jooq/`: 여러 분석에서 선택적으로 재사용하는 jOOQ 계산식 유틸을 둔다. `KotlinNumericExpressions`는 Kotlin 숫자 연산과의 호환이 필요한 분석에서 사용하며 특정 업무의 테이블·규칙에 의존하지 않는다.
 - 대량 데이터의 계산과 최종 CSV 쓰기는 DuckDB에서 수행한다. 전체 입력이나 결과를 Kotlin DataFrame·List·jOOQ fetch 결과로 옮기는 경로를 기본 처리 방식으로 추가하지 않는다.
 - 공유 분석 객체에 현재 요청, 연결, 작업별 가변 쿼리를 저장하지 않는다. `query(parameters)` 호출마다 해당 실행에 사용할 쿼리를 구성한다.
 
