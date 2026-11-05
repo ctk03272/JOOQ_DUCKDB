@@ -78,7 +78,7 @@ data class CapacityParameters(
     val useEarlyShufflingForPicoRC: Boolean,
 )
 
-// 등록된 ID는 CapacityAnalyses.CAPACITY를 참조한다.
+// 등록된 ID는 CapacityAnalysisId.CAPACITY를 참조한다.
 // 같은 이름으로 AnalysisId를 새로 만들지 않는다.
 ```
 
@@ -93,7 +93,7 @@ data class CapacityParameters(
 ```kotlin
 val result = pipeline.process(
     AnalysisRequest(
-        analysisId = CapacityAnalyses.CAPACITY,
+        analysisId = CapacityAnalysisId.CAPACITY,
         inputs = mapOf(
             CAPACITY to InputFile(capacityS3Uri, InputFormat.CSV),
             PURCHASE_ORDER to InputFile(purchaseOrderS3Uri, InputFormat.CSV),

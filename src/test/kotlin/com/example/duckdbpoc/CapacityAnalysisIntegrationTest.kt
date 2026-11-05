@@ -1,6 +1,6 @@
 package com.example.duckdbpoc
 
-import com.example.duckdbpoc.analysis.capacity.CapacityAnalyses
+import com.example.duckdbpoc.analysis.capacity.CapacityAnalysisId
 import com.example.duckdbpoc.analysis.capacity.CapacityParameters
 import com.example.duckdbpoc.application.PipelineService
 import com.example.duckdbpoc.framework.pipeline.AnalysisRequest
@@ -110,7 +110,7 @@ class CapacityAnalysisIntegrationTest {
         execute(CapacityFixture(emptyList()))
         val fixture = CapacityFixture(listOf(CapacityRow("A")))
         val inputs = fixture.write(directory.resolve("failure"))
-        val request = AnalysisRequest(CapacityAnalyses.CAPACITY,
+        val request = AnalysisRequest(CapacityAnalysisId.CAPACITY,
             inputs + (FC_EARLY_SHUFFLING_CONFIG to InputFile(directory.resolve("missing.csv").toString(), InputFormat.CSV)),
             directory.resolve("failure.csv").toString(), parameters)
         assertThatThrownBy { service.process(request) }.isInstanceOf(org.jooq.exception.DataAccessException::class.java)
@@ -137,7 +137,7 @@ class CapacityAnalysisIntegrationTest {
             inputs[table] = InputFile(parquet.toString(), InputFormat.PARQUET)
         }
         val output = directory.resolve("mixed.csv")
-        service.process(AnalysisRequest(CapacityAnalyses.CAPACITY, inputs, output.toString(), parameters))
+        service.process(AnalysisRequest(CapacityAnalysisId.CAPACITY, inputs, output.toString(), parameters))
         anchor.duplicate().use {
             assertThat(readCapacityCsv(it, output)).containsExactlyInAnyOrderElementsOf(fixture.expected(parameters))
         }
@@ -154,7 +154,7 @@ class CapacityAnalysisIntegrationTest {
             Files.writeString(Path.of(inputs.getValue(PURCHASE_ORDER).address),
                 values.keys.joinToString(",") + "\n" + values.values.joinToString(",") + "\n")
             val output = directory.resolve("null-${column.name}.csv")
-            assertThatThrownBy { service.process(AnalysisRequest(CapacityAnalyses.CAPACITY, inputs, output.toString(), parameters)) }
+            assertThatThrownBy { service.process(AnalysisRequest(CapacityAnalysisId.CAPACITY, inputs, output.toString(), parameters)) }
                 .isInstanceOf(org.jooq.exception.DataAccessException::class.java)
             assertThat(Files.exists(output)).isFalse()
             assertCleanedUp()
@@ -177,7 +177,7 @@ class CapacityAnalysisIntegrationTest {
                     defaultEarlyShufflingRatio = job / 100.0, useEarlyShufflingForPicoRC = job % 2 == 0,
                     isUnLimitCapacity = job % 3 == 0)
                 val output = directory.resolve("job-$job.csv")
-                service.process(AnalysisRequest(CapacityAnalyses.CAPACITY, inputs, output.toString(), p))
+                service.process(AnalysisRequest(CapacityAnalysisId.CAPACITY, inputs, output.toString(), p))
                 anchor.duplicate().use { connection ->
                     assertThat(readCapacityCsv(connection, output)).containsExactlyInAnyOrderElementsOf(fixture.expected(p))
                 }
@@ -196,7 +196,7 @@ class CapacityAnalysisIntegrationTest {
     private fun execute(fixture: CapacityFixture, p: CapacityParameters = parameters, name: String = "run"): List<List<Any?>> {
         val inputs = fixture.write(directory.resolve(name))
         val output = directory.resolve("$name.csv")
-        val result = service.process(AnalysisRequest(CapacityAnalyses.CAPACITY, inputs, output.toString(), p))
+        val result = service.process(AnalysisRequest(CapacityAnalysisId.CAPACITY, inputs, output.toString(), p))
         assertThat(result.output).isEqualTo(output.toString())
         assertThat(Files.readAllLines(output).first()).isEqualTo(
             "date,center_code,center_management_type,capacity_type,capacity,overflow_not_allowed,hardcap,revised_capacity," +

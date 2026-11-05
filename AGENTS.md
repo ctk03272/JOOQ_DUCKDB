@@ -76,7 +76,7 @@
 
 ## Capacity 계산 계약
 
-- `CapacityAnalyses.CAPACITY`와 `CapacityParameters`를 사용하며 목록·비율·옵션은 호출마다 전달한다. 계산 순서는 발주 집계 → 용량 차감 → 휴무일 적용 → early shuffling이다.
+- `CapacityAnalysisId.CAPACITY`와 `CapacityParameters`를 사용하며 목록·비율·옵션은 호출마다 전달한다. 계산 순서는 발주 집계 → 용량 차감 → 휴무일 적용 → early shuffling이다.
 - `capacity`, `purchase_order`, `fc_shutdown`은 필수 입력이다. early shuffling 설정만 `optionalInputs`로 등록하며 생략 시 빈 테이블로 생성한다. 전달된 파일의 읽기 오류는 생략으로 취급하지 않는다.
 - early shuffling 파일은 호출자가 groupName으로 필터링해 전달한다. 분석에서 다시 필터링하거나 임의의 그룹을 선택하지 않는다.
 - 발주 집계는 quantity를 사용한다. 기존 중간 변수 이름이 confirmedQuantitySum이었다는 이유로 confirmedQuantity로 변경하지 않는다.

@@ -3,7 +3,7 @@ package com.example.duckdbpoc.configuration
 import com.example.duckdbpoc.analysis.monthly.MonthlyPriceAnalysis
 import com.example.duckdbpoc.analysis.monthly.MonthlyUsageAnalysis
 import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
-import com.example.duckdbpoc.analysis.capacity.CapacityAnalyses
+import com.example.duckdbpoc.analysis.capacity.CapacityAnalysisId
 import com.example.duckdbpoc.analysis.capacity.CapacityAnalysis
 import com.example.duckdbpoc.framework.analysis.ConfiguredAnalysis
 import com.example.duckdbpoc.generated.memory.Pipeline
@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration
 class AnalysisConfiguration {
     @Bean
     fun capacity() = ConfiguredAnalysis(
-        id = CapacityAnalyses.CAPACITY,
+        id = CapacityAnalysisId.CAPACITY,
         schema = Pipeline.PIPELINE,
         query = CapacityAnalysis(),
         requiredInputs = listOf(CAPACITY, PURCHASE_ORDER, FC_SHUTDOWN),
