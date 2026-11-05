@@ -1,5 +1,8 @@
 package com.example.duckdbpoc
 
+import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
+import com.example.duckdbpoc.framework.analysis.AnalysisId
+
 import com.example.duckdbpoc.application.PipelineService
 import com.example.duckdbpoc.framework.analysis.AnalysisRegistry
 import com.example.duckdbpoc.framework.pipeline.InputFile
@@ -14,7 +17,7 @@ internal val String.localPath: Path get() = Path.of(this)
 internal fun executeFixture(
     registry: AnalysisRegistry,
     executor: PipelineExecutor,
-    id: String,
+    id: AnalysisId<Unit>,
     directory: Path,
     output: Path,
 ) = registry.get(id).let { original ->
@@ -22,7 +25,7 @@ internal fun executeFixture(
     PipelineService(executor, registry).process(
         AnalysisRequest(id, original.requiredInputs.associateWith {
             InputFile(directory.resolve("${it.name}.parquet").toString(), InputFormat.PARQUET)
-        }, output = output.toString()),
+        }, output = output.toString(), parameters = Unit),
     )
 }
 

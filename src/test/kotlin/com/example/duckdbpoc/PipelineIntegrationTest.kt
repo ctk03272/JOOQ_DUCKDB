@@ -1,5 +1,8 @@
 package com.example.duckdbpoc
 
+import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
+import com.example.duckdbpoc.framework.analysis.AnalysisId
+
 import com.example.duckdbpoc.application.PipelineService
 import com.example.duckdbpoc.framework.pipeline.PipelineExecutor
 import com.example.duckdbpoc.framework.pipeline.InputFile
@@ -41,7 +44,7 @@ class PipelineIntegrationTest {
     fun `usage analysis exports monthly statistics without price columns`() {
         fixture()
         val output = directory.resolve("report 'quoted'/result.csv")
-        processFixture("monthly-usage", directory, output)
+        processFixture(MonthlyAnalyses.USAGE, directory, output)
         assertThat(csvContents(output).first).isEqualTo(
             "system_id,system_name,reading_year,reading_month,reading_count,power_sum,power_average",
         )
@@ -51,14 +54,14 @@ class PipelineIntegrationTest {
             "2,Beta,2024,1,1,5.000,5.000000",
         )
         val firstOutput = csvContents(output)
-        processFixture("monthly-usage", directory, output)
+        processFixture(MonthlyAnalyses.USAGE, directory, output)
         assertThat(csvContents(output)).isEqualTo(firstOutput)
     }
 
     @Test
     fun `processes the supplied parquet files`() {
         val output = directory.resolve("sample.csv")
-        processFixture("monthly-usage", Path.of("excmples"), output)
+        processFixture(MonthlyAnalyses.USAGE, Path.of("excmples"), output)
         assertThat(Files.size(output)).isPositive()
         DriverManager.getConnection("jdbc:duckdb:").use { connection ->
             connection.prepareStatement("SELECT sum(reading_count) FROM read_csv(?, header=true)").use { query ->
@@ -88,7 +91,7 @@ class PipelineIntegrationTest {
                 executor.submit<PipelineResult> {
                     ready.countDown()
                     check(start.await(30, TimeUnit.SECONDS))
-                    processFixture("monthly-usage", directory, directory.resolve("job-$job.csv"))
+                    processFixture(MonthlyAnalyses.USAGE, directory, directory.resolve("job-$job.csv"))
                 }
             }
             check(ready.await(30, TimeUnit.SECONDS))
@@ -110,9 +113,9 @@ class PipelineIntegrationTest {
         fixture()
         Files.delete(directory.resolve("prices.parquet"))
         val output = directory.resolve("usage.csv")
-        processFixture("monthly-usage", directory, output)
+        processFixture(MonthlyAnalyses.USAGE, directory, output)
         assertThat(Files.readAllLines(output)).hasSize(4)
-        val definition = registry.get("monthly-usage")
+        val definition = registry.get(MonthlyAnalyses.USAGE)
         jobs.use(definition.schema, definition.requiredInputs + definition.outputTable) { ctx ->
             definition.requiredInputs.forEach { loader.load(ctx, it, directory.resolve("${it.name}.parquet").toString()) }
             val readingTime = ctx.select(READINGS.READ_ON).from(READINGS)
@@ -127,7 +130,7 @@ class PipelineIntegrationTest {
         fixture()
         Files.delete(directory.resolve("systems.parquet"))
         val output = directory.resolve("price.csv")
-        processFixture("monthly-price", directory, output)
+        processFixture(MonthlyAnalyses.PRICE, directory, output)
         assertThat(csvContents(output).first).isEqualTo(
             "system_id,reading_year,reading_month,priced_power_sum",
         )
@@ -142,7 +145,7 @@ class PipelineIntegrationTest {
     @Test
     fun `unknown analysis fails without writing output or leaking a job`() {
         val output = directory.resolve("unknown.csv")
-        assertThatThrownBy { processFixture("unknown", directory, output) }
+        assertThatThrownBy { processFixture(AnalysisId<Unit>("unknown"), directory, output) }
             .isInstanceOf(NoSuchElementException::class.java)
         assertThat(Files.exists(output)).isFalse()
         assertCleanedUp()
@@ -156,10 +159,10 @@ class PipelineIntegrationTest {
         Files.move(directory.resolve("systems.parquet"), systems)
         Files.move(directory.resolve("readings.parquet"), readings)
         val service = PipelineService(executor, registry)
-        val request = AnalysisRequest("monthly-usage", mapOf(
+        val request = AnalysisRequest(MonthlyAnalyses.USAGE, mapOf(
             com.example.duckdbpoc.generated.memory.tables.references.SYSTEMS to InputFile(systems.toString(), InputFormat.PARQUET),
             READINGS to InputFile(readings.toString(), InputFormat.PARQUET),
-        ), output = directory.resolve("request.csv").toString())
+        ), output = directory.resolve("request.csv").toString(), parameters = Unit)
         val result = service.process(request)
         assertThat(Files.readAllLines(result.output.localPath)).hasSize(4)
         assertThatThrownBy { service.process(request.copy(inputs = mapOf(READINGS to InputFile(readings.toString(), InputFormat.PARQUET)))) }
@@ -172,7 +175,7 @@ class PipelineIntegrationTest {
         fixture()
         Files.delete(directory.resolve("readings.parquet"))
         val output = directory.resolve("missing-input.csv")
-        assertThatThrownBy { processFixture("monthly-usage", directory, output) }
+        assertThatThrownBy { processFixture(MonthlyAnalyses.USAGE, directory, output) }
             .isInstanceOf(org.jooq.exception.DataAccessException::class.java)
             .hasRootCauseInstanceOf(java.sql.SQLException::class.java)
         assertThat(Files.exists(output)).isFalse()
@@ -182,8 +185,8 @@ class PipelineIntegrationTest {
     @Test
     fun `only selected tables are created even across domain files`() {
         for ((id, names) in mapOf(
-            "monthly-usage" to listOf("systems", "readings", "monthly_usage"),
-            "monthly-price" to listOf("prices", "readings", "monthly_price"),
+            MonthlyAnalyses.USAGE to listOf("systems", "readings", "monthly_usage"),
+            MonthlyAnalyses.PRICE to listOf("prices", "readings", "monthly_price"),
         )) {
             val definition = registry.get(id)
             jobs.use(definition.schema, definition.requiredInputs + definition.outputTable) { ctx ->
@@ -201,15 +204,16 @@ class PipelineIntegrationTest {
         val csv = directory.resolve("systems.csv")
         Files.writeString(csv, "name,id\n\"Alpha, East\",1\nBeta,2\n")
         val expected = directory.resolve("expected.csv")
-        processFixture("monthly-usage", directory, expected)
+        processFixture(MonthlyAnalyses.USAGE, directory, expected)
         val output = directory.resolve("mixed.csv")
         pipeline.process(AnalysisRequest(
-            "monthly-usage",
+            MonthlyAnalyses.USAGE,
             mapOf(
                 com.example.duckdbpoc.generated.memory.tables.references.SYSTEMS to InputFile(csv.toString(), InputFormat.CSV),
                 READINGS to InputFile(directory.resolve("readings.parquet").toString(), InputFormat.PARQUET),
             ),
             output.toString(),
+            parameters = Unit,
         ))
         assertThat(csvContents(output)).isEqualTo(csvContents(expected))
         assertCleanedUp()
@@ -226,7 +230,7 @@ class PipelineIntegrationTest {
                 statement.execute()
             }
         }
-        val definition = registry.get("monthly-price")
+        val definition = registry.get(MonthlyAnalyses.PRICE)
         jobs.use(definition.schema, listOf(READINGS)) { ctx ->
             csvLoader.load(ctx, READINGS, csv.toString())
             val row = ctx.select(READINGS.READ_ON, READINGS.POWER).from(READINGS)
@@ -237,7 +241,7 @@ class PipelineIntegrationTest {
         assertCleanedUp()
     }
 
-    private fun processFixture(id: String, input: Path, output: Path) =
+    private fun processFixture(id: AnalysisId<Unit>, input: Path, output: Path) =
         executeFixture(registry, executor, id, input, output)
 
     private fun assertCleanedUp() {

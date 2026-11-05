@@ -2,6 +2,7 @@ package com.example.duckdbpoc.configuration
 
 import com.example.duckdbpoc.analysis.monthly.MonthlyPriceAnalysis
 import com.example.duckdbpoc.analysis.monthly.MonthlyUsageAnalysis
+import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
 import com.example.duckdbpoc.framework.analysis.ConfiguredAnalysis
 import com.example.duckdbpoc.generated.memory.Pipeline
 import com.example.duckdbpoc.generated.memory.tables.references.*
@@ -12,7 +13,7 @@ import org.springframework.context.annotation.Configuration
 class AnalysisConfiguration {
     @Bean
     fun monthlyUsage() = ConfiguredAnalysis(
-        id = "monthly-usage",
+        id = MonthlyAnalyses.USAGE,
         schema = Pipeline.PIPELINE,
         query = MonthlyUsageAnalysis(),
         requiredInputs = listOf(SYSTEMS, READINGS),
@@ -21,7 +22,7 @@ class AnalysisConfiguration {
 
     @Bean
     fun monthlyPrice() = ConfiguredAnalysis(
-        id = "monthly-price",
+        id = MonthlyAnalyses.PRICE,
         schema = Pipeline.PIPELINE,
         query = MonthlyPriceAnalysis(),
         requiredInputs = listOf(PRICES, READINGS),

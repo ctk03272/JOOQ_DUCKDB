@@ -1,5 +1,7 @@
 package com.example.duckdbpoc
 
+import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
+
 import com.example.duckdbpoc.application.PipelineService
 import com.example.duckdbpoc.configuration.AwsS3Settings
 import com.example.duckdbpoc.framework.pipeline.InputFile
@@ -25,20 +27,20 @@ class S3IntegrationTest {
 
     @Test
     fun `monthly price uses actual Spring configuration for S3 input and output`() {
-        val request = AnalysisRequest("monthly-price", mapOf(
+        val request = AnalysisRequest(MonthlyAnalyses.PRICE, mapOf(
             PRICES to InputFile(System.getenv().getValue("S3_TEST_PRICES_URI"), InputFormat.PARQUET),
             READINGS to InputFile(System.getenv().getValue("S3_TEST_READINGS_URI"), InputFormat.PARQUET),
-        ), output = System.getenv().getValue("S3_TEST_PRICE_OUTPUT_URI"))
+        ), output = System.getenv().getValue("S3_TEST_PRICE_OUTPUT_URI"), parameters = Unit)
         verify(request)
         verify(request.copy(output = System.getenv().getValue("S3_TEST_PRICE_ALTERNATE_OUTPUT_URI")))
     }
 
     @Test
     fun `monthly usage uses actual Spring configuration for S3 input and output`() {
-        verify(AnalysisRequest("monthly-usage", mapOf(
+        verify(AnalysisRequest(MonthlyAnalyses.USAGE, mapOf(
             SYSTEMS to InputFile(System.getenv().getValue("S3_TEST_SYSTEMS_URI"), InputFormat.PARQUET),
             READINGS to InputFile(System.getenv().getValue("S3_TEST_READINGS_URI"), InputFormat.PARQUET),
-        ), output = System.getenv().getValue("S3_TEST_USAGE_OUTPUT_URI")))
+        ), output = System.getenv().getValue("S3_TEST_USAGE_OUTPUT_URI"), parameters = Unit))
     }
 
     @Test
@@ -52,13 +54,13 @@ class S3IntegrationTest {
                 statement.execute()
             }
         }
-        verify(AnalysisRequest("monthly-price", mapOf(
+        verify(AnalysisRequest(MonthlyAnalyses.PRICE, mapOf(
             PRICES to InputFile(System.getenv().getValue("S3_TEST_PRICES_URI"), InputFormat.PARQUET),
             READINGS to InputFile(csvAddress, InputFormat.CSV),
-        ), output = System.getenv().getValue("S3_TEST_CSV_OUTPUT_URI")))
+        ), output = System.getenv().getValue("S3_TEST_CSV_OUTPUT_URI"), parameters = Unit))
     }
 
-    private fun verify(request: AnalysisRequest) {
+    private fun verify(request: AnalysisRequest<Unit>) {
         assertThat(aws.enabled).isTrue()
         assertThat(aws.region).isEqualTo("ap-northeast-2")
         assertThat(aws.profile).isEqualTo("duckdb-poc")

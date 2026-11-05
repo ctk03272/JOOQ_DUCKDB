@@ -1,5 +1,7 @@
 package com.example.duckdbpoc
 
+import com.example.duckdbpoc.analysis.monthly.MonthlyAnalyses
+
 import com.example.duckdbpoc.framework.pipeline.PipelineResult
 import com.example.duckdbpoc.framework.analysis.AnalysisRegistry
 import com.example.duckdbpoc.framework.pipeline.PipelineExecutor
@@ -45,7 +47,7 @@ class PipelineLoadTest {
                         val current = active.incrementAndGet()
                         peak.accumulateAndGet(current, ::maxOf)
                         try {
-                            executeFixture(registry, pipelineExecutor, if (job % 2 == 0) "monthly-usage" else "monthly-price", Path.of("excmples"), directory.resolve("job-$job/processing.csv"))
+                            executeFixture(registry, pipelineExecutor, if (job % 2 == 0) MonthlyAnalyses.USAGE else MonthlyAnalyses.PRICE, Path.of("excmples"), directory.resolve("job-$job/processing.csv"))
                         } finally {
                             active.decrementAndGet()
                         }

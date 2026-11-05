@@ -6,8 +6,8 @@ import com.example.duckdbpoc.generated.memory.tables.references.PRICES
 import com.example.duckdbpoc.generated.memory.tables.references.READINGS
 import org.jooq.impl.DSL.*
 
-class MonthlyPriceAnalysis : DuckDbAnalysis {
-    override fun query() = select(
+class MonthlyPriceAnalysis : DuckDbAnalysis<Unit> {
+    override fun query(parameters: Unit) = select(
         READINGS.SYSTEM_ID.`as`(MONTHLY_PRICE.SYSTEM_ID),
         year(READINGS.READ_ON).`as`(MONTHLY_PRICE.READING_YEAR),
         month(READINGS.READ_ON).`as`(MONTHLY_PRICE.READING_MONTH),

@@ -1,6 +1,6 @@
 # DuckDB + jOOQ 분석 실행 기반
 
-분석 클래스는 `DuckDbAnalysis.query()`에 jOOQ SELECT만 작성한다. 공통 실행기가 연결·고유 스키마·입력 적재·트랜잭션·분석 실행·출력·정리를 담당한다. 사용량과 가격 분석은 독립적으로 실행되며 결과를 결합하지 않는다.
+분석 클래스는 `DuckDbAnalysis<P>.query(parameters)`에 jOOQ SELECT만 작성한다. 공통 실행기가 연결·고유 스키마·입력 적재·트랜잭션·분석 실행·출력·정리를 담당한다. 사용량과 가격 분석은 독립적으로 실행되며 결과를 결합하지 않는다.
 
 **입력 파일 주소는 요청에서 받고, 출력 주소는 사용하는 개발자가 호출할 때 `AnalysisRequest.output`으로 전달한다.** 운영 입력·출력 계약은 S3 주소 문자열이다. FileLocation과 로컬 파일 분기는 없다. S3 입력은 DuckDB의 `read_csv`·`read_parquet`, S3 출력은 DuckDB의 `COPY`를 직접 사용한다. JVM 전체 파일 다운로드·업로드나 AWS Java SDK 의존성은 추가하지 않았다. 입력은 파일별로 CSV 또는 Parquet를 명시하며 출력은 CSV다.
 
@@ -9,7 +9,8 @@
 ```kotlin
 val result = pipeline.process(
     AnalysisRequest(
-        analysisId = "monthly-price",
+        analysisId = MonthlyAnalyses.PRICE,
+        parameters = Unit,
         requestId = "message-123", // 생략 시 UUID
         output = "s3://my-bucket/project-a/prices/result.csv",
         inputs = mapOf(
@@ -47,7 +48,7 @@ analysis:
 ```kotlin
 @Bean
 fun monthlyPrice() = ConfiguredAnalysis(
-    id = "monthly-price",
+    id = MonthlyAnalyses.PRICE,
     schema = Pipeline.PIPELINE,
     query = MonthlyPriceAnalysis(),
     requiredInputs = listOf(PRICES, READINGS),
@@ -58,6 +59,35 @@ fun monthlyPrice() = ConfiguredAnalysis(
 출력 주소는 호출자가 지정한 값을 그대로 사용한다. 공통 실행기가 버킷·폴더·파일명·요청 ID를 덧붙이지 않는다. 같은 분석도 호출마다 다른 경로에 저장할 수 있다.
 
 분석은 객체를 직접 참조하고, 테이블·컬럼은 codegen 객체를 참조한다. 공통 출력 단계는 ORDER BY를 추가하지 않는다. 분석 작성자는 쿼리에 필요한 ORDER BY를 직접 작성할 수 있다. DuckDB의 기본 preserve_insertion_order=true에서 정렬된 결과를 일반 INSERT로 적재하고 단일 테이블 SELECT와 COPY로 내보내는 현재 경로는 그 순서를 보존한다. JOIN·GROUP BY 자체는 순서를 보장하지 않으므로 정렬이 필요한 분석에서 ORDER BY를 작성한다. 같은 정렬 키를 가진 행끼리의 순서까지 정하려면 추가 정렬 키가 필요하다. 별도 입력·업무 검증 계층은 없다. 가격 기간 중첩·누락·참조 오류를 사전 검사하지 않고 분석 쿼리를 실행한다. SQL 값의 파라미터 바인딩과 실패 시 자원 정리는 유지하며 DuckDB 및 S3 오류는 그대로 전파한다. 직접 추가한 애플리케이션 완료 로그와 테스트 출력 로그도 제거했다.
+
+## 호출별 분석 파라미터
+
+`AnalysisId<P>`, `ConfiguredAnalysis<P>`, `DuckDbAnalysis<P>`, `AnalysisRequest<P>`가 같은 파라미터 타입을 사용한다. `PipelineService.process`와 공통 실행기는 이 타입을 유지해 요청의 `parameters`를 `query(parameters)`에 전달한다. 추가 인자가 없는 월별 분석은 `Unit`을 사용한다.
+
+분석 ID는 한 번 선언한 객체를 등록과 호출에서 함께 참조한다. 기존 월별 분석은 `MonthlyAnalyses.USAGE`와 `MonthlyAnalyses.PRICE`다. 같은 문자열로 `AnalysisId`를 다시 생성해도 등록된 ID가 되지 않는다. 문자열 이름만으로 다른 파라미터 타입의 분석에 연결되지 않게 하기 위한 계약이다. ID는 내부 Kotlin API이며 외부 메시지 형식을 정의하지 않는다.
+
+새 분석에서 사용하는 패턴은 다음과 같다. 아래 Capacity 타입은 사용법 설명이며 capacity 계산 구현은 아직 포함하지 않는다.
+
+```kotlin
+data class CapacityParameters(
+    val rcList: List<String>,
+    val xDockList: List<String>,
+    val picoRcList: List<String>,
+    val defaultEarlyShufflingRatio: Double,
+    val isUnLimitCapacity: Boolean,
+    val useEarlyShufflingForPicoRC: Boolean,
+)
+
+val CAPACITY_ANALYSIS = AnalysisId<CapacityParameters>("capacity")
+
+// 분석 구현: DuckDbAnalysis<CapacityParameters>
+// Kotlin Bean 등록: ConfiguredAnalysis(id = CAPACITY_ANALYSIS, query = ..., ...)
+// 호출: AnalysisRequest(analysisId = CAPACITY_ANALYSIS, parameters = CapacityParameters(...), ...)
+```
+
+예를 들어 `MonthlyAnalyses.PRICE`에 `parameters = "wrong"`을 전달하면 타입 불일치로 컴파일되지 않는다. 공통 Registry는 서로 다른 타입의 분석들을 저장하므로 조회 한 곳에서만 제네릭 캐스트를 사용한다. 동일한 ID 객체의 타입과 분석 타입이 등록 시 연결되어 있으며, 문자열을 비교해 타입을 추정하지 않는다.
+
+공유 분석 객체에 파라미터를 저장하지 않는다. 각 호출은 자신의 파라미터로 새 쿼리를 만든다. 파라미터는 임의의 Kotlin 타입이므로 공통 실행기가 깊은 복사를 하지 않는다. 호출자는 실행 중 파라미터나 내부 컬렉션을 변경하지 않고, 가변 목록에서 값을 가져온다면 요청을 만들 때 `toList()` 등으로 별도 값을 준비한다.
 
 ## AWS 설정과 인증
 
@@ -101,12 +131,12 @@ Java 21과 기존 고정 버전을 유지한다. `./gradlew build`로 빌드한�
 ## 분석 쿼리만 작성
 
 ```kotlin
-interface DuckDbAnalysis {
-    fun query(): Select<*>
+interface DuckDbAnalysis<P> {
+    fun query(parameters: P): Select<*>
 }
 
-class MonthlyPriceAnalysis : DuckDbAnalysis {
-    override fun query() = select(
+class MonthlyPriceAnalysis : DuckDbAnalysis<Unit> {
+    override fun query(parameters: Unit) = select(
         READINGS.SYSTEM_ID.`as`(MONTHLY_PRICE.SYSTEM_ID),
         year(READINGS.READ_ON).`as`(MONTHLY_PRICE.READING_YEAR),
         month(READINGS.READ_ON).`as`(MONTHLY_PRICE.READING_MONTH),
@@ -120,7 +150,7 @@ class MonthlyPriceAnalysis : DuckDbAnalysis {
 
 쿼리는 연결 없이 생성하고 공통 실행기가 작업별 연결로 실행한다. 분석 객체에 작업 상태나 실행 중인 가변 Query를 저장하지 않는다. 분석별 Factory, Workspace, PipelineDefinition, Service를 구현할 필요가 없다.
 
-새 분석은 필요한 테이블을 해당 도메인 SQL에 정의하고 새 파일도 db/ 아래에 둔 뒤 codegen을 실행한 다음, `query()` 구현과 Kotlin 설정을 추가한다. SELECT와 대상 테이블의 컬럼 대응은 분석 코드가 정의한다. 공통 실행기에 별도의 컬럼 이름·순서 사전 검사는 없고 SQL 실행 오류는 DuckDB에서 전파된다.
+새 분석은 필요한 테이블을 해당 도메인 SQL에 정의하고 새 파일도 db/ 아래에 둔 뒤 codegen을 실행한 다음, `query(parameters)` 구현과 Kotlin 설정을 추가한다. SELECT와 대상 테이블의 컬럼 대응은 분석 코드가 정의한다. 공통 실행기에 별도의 컬럼 이름·순서 사전 검사는 없고 SQL 실행 오류는 DuckDB에서 전파된다.
 
 ## 계층과 수명
 
@@ -152,7 +182,8 @@ S3 출력은 DuckDB가 최종 S3 객체에 직접 COPY한다. DB 트랜잭션이
 ./gradlew loadTest -PloadJobs=120
 ```
 
-- 일반 테스트는 로컬 fixture 통합 테스트 11개와 S3 SQL 어댑터 테스트 4개다. 입력 누락과 실제 DuckDB 파일 읽기 실패의 예외 전파·정리를 검증한다.
+- 일반 테스트는 로컬 fixture 통합 테스트 11개, 호출별 파라미터 통합 테스트 2개, S3 SQL 어댑터 테스트 4개다. 입력 누락과 실제 DuckDB 파일 읽기 실패의 예외 전파·정리를 검증한다.
+- 파라미터 통합 테스트는 실제 Spring 서비스·등록·실행기·DB 설정에 테스트용 분석 Bean만 추가한다. 서로 다른 목록·배수·플래그를 가진 100개 동시 요청의 CSV 내용, 다른 파라미터 타입의 분석 등록, 요청 재사용 시 값 변경, 동일 표시 이름을 가진 미등록 ID의 거부와 자원 정리를 검증한다. 이 테스트의 입출력은 로컬 fixture이며 실제 S3 입출력 검증이 아니다.
 - 기존 계산·가격 경계·마이크로초·스키마/연결 정리 검증을 유지한다. 제거한 업무 검증의 예외를 기대하던 테스트 2개도 제거했다.
 - S3 SQL 어댑터 테스트는 JDBC mock으로 주소 바인딩·오류 전파를 확인한다. 실제 AWS 권한·네트워크·multipart 성공 증거가 아니다.
 - 별도 부하 테스트에서 로컬 사용량 50개·가격 50개 요청이 모두 성공했고 분석별 출력 일치와 스키마·연결 정리를 확인했다. S3 100개 요청의 성능 보장은 아니다. 보고서: `build/load-test-results/run-7fc60f55-32fd-4e3f-8d16-f1edfa452dd5/report.txt`.

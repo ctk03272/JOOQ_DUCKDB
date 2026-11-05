@@ -16,11 +16,11 @@ class PipelineExecutor(
     private val materializer: AnalysisMaterializer,
     private val exporter: CsvExporter,
 ) {
-    fun execute(definition: ConfiguredAnalysis, request: AnalysisRequest, output: String): PipelineResult = jobs.use(definition.schema, definition.requiredInputs + definition.outputTable) { ctx ->
+    fun <P> execute(definition: ConfiguredAnalysis<P>, request: AnalysisRequest<P>, output: String): PipelineResult = jobs.use(definition.schema, definition.requiredInputs + definition.outputTable) { ctx ->
         ctx.transaction { configuration ->
             val tx = DSL.using(configuration)
             definition.requiredInputs.forEach { loader.load(tx, it, request.inputs.getValue(it)) }
-            materializer.store(tx, definition.outputTable, definition.query.query())
+            materializer.store(tx, definition.outputTable, definition.query.query(request.parameters))
         }
         exporter.export(ctx, ctx.selectFrom(definition.outputTable), output)
         PipelineResult(output)
