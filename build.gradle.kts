@@ -19,8 +19,11 @@ val generatedSources = layout.projectDirectory.dir("src/main/kotlin")
 
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.16"))
-    implementation("org.springframework.boot:spring-boot-starter")
-    implementation(kotlin("reflect"))
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    // Keep the existing compiler/runtime version when Jackson brings Kotlin transitively.
+    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.9.25") } }
+    implementation("org.jetbrains.kotlin:kotlin-reflect") { version { strictly("1.9.25") } }
     implementation("org.jooq:jooq:$jooqVersion")
     implementation("org.duckdb:duckdb_jdbc:$duckdbVersion")
     jooqCodegen("org.duckdb:duckdb_jdbc:$duckdbVersion")

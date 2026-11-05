@@ -2,7 +2,7 @@ spring:
   application:
     name: duckdb-jooq-poc
   main:
-    web-application-type: none
+    web-application-type: servlet
     banner-mode: off
 duckdb:
   memory-limit: 2GB

@@ -24,7 +24,34 @@ println(result.output) // s3:// 결과 주소
 
 `PRICES`, `READINGS`는 codegen 테이블 객체다. 요청은 파일 이름 규칙이나 입력 디렉터리에 의존하지 않는다. 주소 형식·파일 존재 여부·요청 ID·설정 매핑을 사전 검사하지 않는다. 주소 문자열은 바인드 파라미터로 DuckDB에 전달하고 실제 DB/스토리지 오류를 그대로 전파한다. 분석 ID나 필요한 입력이 없으면 일반 컬렉션 조회 오류가 발생한다.
 
-HTTP/SQS 수신기를 새로 구현한 것은 아니며, 수신기에서 위 API로 요청을 전달한다. 출력 주소는 호출 코드가 정해 요청 객체에 넣는다. 외부 SQS 메시지에 출력 주소 필드를 추가해야 한다는 뜻은 아니다.
+Capacity 예시 Controller는 아래 HTTP 요청을 위 API로 연결한다. SQS 리스너는 포함하지 않는다. 출력 주소는 호출 코드가 정해 요청 객체에 넣는다. 외부 SQS 메시지에 출력 주소 필드를 추가해야 한다는 뜻은 아니다.
+
+## Capacity HTTP 예시
+
+`./gradlew bootRun`으로 실행한 뒤 `POST /analyses/capacity`를 호출한다. 이 예시 엔드포인트는 세 입력을 모두 CSV로 받으며 early shuffling 설정 파일은 전달하지 않는다. 해당 설정은 기존 분석 계약에 따라 빈 테이블로 생성되고 요청의 목록·기본 비율을 사용한다. 공통 파이프라인의 CSV/Parquet 및 선택 입력 지원은 그대로다.
+
+```bash
+curl -X POST http://localhost:8080/analyses/capacity \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "capacityUri": "s3://my-bucket/input/capacity.csv",
+    "purchaseOrderUri": "s3://my-bucket/input/purchase-order.csv",
+    "shutdownUri": "s3://my-bucket/input/shutdown.csv",
+    "outputUri": "s3://my-bucket/output/capacity-result.csv",
+    "rcList": ["FC01"],
+    "xDockList": ["FC02"],
+    "picoRcList": [],
+    "defaultEarlyShufflingRatio": 0.2,
+    "isUnLimitCapacity": false,
+    "useEarlyShufflingForPicoRC": false
+  }'
+```
+
+버킷과 파일 주소는 실제 입력·출력 주소로 바꾼다. Controller가 `capacityUri → CAPACITY`, `purchaseOrderUri → PURCHASE_ORDER`, `shutdownUri → FC_SHUTDOWN`을 명시적으로 연결한다. URI에서 테이블 이름을 추측하지 않는다.
+
+분석과 CSV 저장이 끝나면 HTTP 200과 `{"output":"s3://my-bucket/output/capacity-result.csv"}`를 반환한다. 동기 호출이며 요청별 결과를 따로 보관하려면 서로 다른 출력 주소를 전달한다. 테스트 전용 실행 코드 없이 실제 `PipelineService` Bean을 호출한다.
+
+`CapacityControllerIntegrationTest`는 실제 HTTP 서버·설정·주입된 분석 실행 경로를 사용하되 파일 입출력은 테스트 디렉터리의 fixture로 확인한다. 이 테스트가 실제 S3 입출력을 검증하는 것은 아니다.
 
 ## 개발자가 결정하는 Kotlin 설정
 
@@ -164,7 +191,7 @@ Java 21과 기존 고정 버전을 유지한다. `./gradlew build`로 빌드한�
 
 `main`은 Spring 컨텍스트를 시작한다. 기동 시 분석을 자동 실행하거나 입력·출력 명령줄 인자를 해석하지 않는다. `runApplication` 반환 직후 컨텍스트를 닫는 코드도 없다. 분석은 사용하는 코드에서 주입받은 `PipelineService.process(AnalysisRequest(...))`를 호출할 때 실행된다.
 
-현재 HTTP 서버나 SQS 메시지 리스너는 구현되어 있지 않다. 따라서 단독 실행을 지속적인 메시지 소비자 동작으로 검증한 것은 아니다. 임의의 대기 루프나 keep-alive 설정은 추가하지 않는다. 분석 설정에는 고정 파일명이 없으며 로컬 fixture 조립은 src/test에만 있다.
+HTTP 서버와 Capacity 예시 Controller가 포함되어 있다. SQS 메시지 리스너와 솔버 호출은 구현되어 있지 않다. 분석 설정에는 고정 파일명이 없으며 로컬 fixture 조립은 src/test에만 있다.
 
 ## 분석 쿼리만 작성
 
